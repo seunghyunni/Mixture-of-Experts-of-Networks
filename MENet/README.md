@@ -2,6 +2,7 @@ dataset: CIFAR10
 
 main: train / validate code
 
-model: embedding_net 2 ( resnet 18로 해놓음 지금은)
-
-utils: gating network 
+model: MixNet S , MixNet M 
+       두 모델 모두 5번째 layer에서 끊어서 gating 삽입 시도 
+       
+utils: gating network , gumbel softmax 함수  
