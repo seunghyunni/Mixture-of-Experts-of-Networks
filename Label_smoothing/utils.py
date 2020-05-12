@@ -11,6 +11,23 @@ import torch.nn as nn
 import copy
 
 
+class LabelSmoothingLoss(nn.Module):
+    def __init__(self, classes, dim=-1):
+        super(LabelSmoothingLoss, self).__init__()
+        self.cls = classes
+        self.dim = dim
+
+    def forward(self, pred, target, smoothing):
+        pred = pred.log_softmax(dim=self.dim)
+        confidence = 1.0 - smoothing
+        with torch.no_grad():
+            # true_dist = pred.data.clone()
+            true_dist = torch.zeros_like(pred)
+            true_dist.fill_(smoothing / (self.cls - 1))
+            true_dist.scatter_(1, target.data.long().unsqueeze(1), confidence)
+        return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
+
+
 def imshow(img):
   # Unnormalize
   img = img/2 + 0.5
@@ -65,17 +82,17 @@ def show_plot(iteration,loss):
 #         return loss.sum() / 32
 
 
-def smooth(label, smoothing, batch_size = 32, num_class = 10):
+def smooth(label, smoothing, n_class = 1000, batch_size = 64):
     result = None
 
     # with torch.no_grad():
-    class_num = num_class
+    class_num = n_class
 
     delta = 0.9
-    for idx, weigth in enumerate(smoothing):
-        if weigth > delta:
+    for idx, weight in enumerate(smoothing):
+        if weight > delta:
             smoothing[idx] = 0.9
-        elif weigth <= 0:
+        elif weight <= 0:
             smoothing[idx] = 0
 
     outputs = []
@@ -97,37 +114,12 @@ def smooth(label, smoothing, batch_size = 32, num_class = 10):
     for val in outputs[1:]:
         result = torch.cat((result, val), dim=0)
 
-    result = result.reshape(8, 10).cuda()
+    result = result.reshape(batch_size, n_class).cuda()
 
     if result is None:
         pass
 
     return result
-
-
-class AccumulatedAccuracyMetric:
-    """
-    Works with classification model
-    """
-    def __init__(self):
-        self.correct = 0
-        self.total = 0
-
-    def call(self, outputs, target):
-        pred = outputs[0].data.max(1, keepdim=True)[1]
-        self.correct += pred.eq(target[0].data.view_as(pred)).cpu().sum()
-        self.total += target[0].size(0)
-        return self.value()
-
-    def reset(self):
-        self.correct = 0
-        self.total = 0
-
-    def value(self):
-        return 100 * float(self.correct) / self.total
-
-    def name(self):
-        return 'Accuracy'
 
 
 class CheckpointSaver:

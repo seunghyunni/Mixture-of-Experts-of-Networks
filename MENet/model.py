@@ -15,12 +15,12 @@ import geffnet
 
 
 class Classifier(nn.Module):
-    def __init__(self, image_size=32, x_dim=3072, num_model=2):
+    def __init__(self, image_size=224, num_model=2):
         super(Classifier, self).__init__()
         self.image_size = image_size
         
         self.num_model = num_model
-        self.num_class = 10
+        self.num_class = 1000
 
         # MixNet S
         self.mixnet_s = geffnet.create_model('mixnet_s', pretrained=False) 
@@ -88,14 +88,16 @@ class Classifier(nn.Module):
         
         # Feature
         # 16 x 1 x channel x feature_map_size x feature_map_size
-        # 16 x 1 x 120 x 2 x 2
-        feature = self.all_layers1[0](x).unsqueeze(1)
-        
+        #print(self.all_layers1[0](x).shape) # 16, 120, 14, 14
+        feature = self.all_layers1[0](x).unsqueeze(1) 
+        #print(feature.shape)# 16, 1, 120, 14, 14
+
         # Main1
         for i in range(1, self.num_model):  # from 1 to ~
             temp = self.all_layers1[i](x).unsqueeze(1)
             feature = torch.cat([feature, temp], dim=1)
         
+        # print(feature.shape) # 16, 2, 120, 14, 14
         # feature (by concat)
         # 16 x num_model x channel x feature_map_size x feature_map_size
         # ex) 16 x 2 x 120 x 2 x 2
@@ -111,13 +113,12 @@ class Classifier(nn.Module):
             output = torch.cat([output, temp], dim=1)
 
         # output (by concat)
-        # 16 x 2 x 10
+        # 16 x 2 x 1000
 
-        # batch x num_model x _dim
-        # 16 x 2 x 480
-        feature = feature.contiguous().view(feature.size(0), 2, -1)
+        # batch x num_model x _dim 
+
+        feature = feature.contiguous().view(feature.size(0), 240, 14,14)
         feature = self.relu(feature)
         # 16 x 960
-        feature = feature.contiguous().view(feature.size(0), -1)
-
+        #feature = feature.contiguous().view(feature.size(0), -1)
         return output, feature

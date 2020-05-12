@@ -18,23 +18,21 @@ class Gumbel_Net(nn.Module):
     # Accept x, put it into linear transformation,
     # pass it through gumbel_softmax, expand dimension into image size and output it
 
-    def __init__(self, num_model, x_dim):
+    def __init__(self, num_model, f_dim):
         super(Gumbel_Net, self).__init__()
         self.num_model = num_model
-        self.x_dim = x_dim
-        self.f_dim = self.num_model * 480
+        self.f_dim = f_dim
+        #self.x_dim = 150528
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         mlp_layers = []
-        mlp_layers.append(nn.Linear(self.x_dim+ self.f_dim, int((self.x_dim+self.f_dim)/2)))  # (3072 + 2 * 480, (3072 + 2 * 480)/2)
-        mlp_layers.append(nn.BatchNorm1d(int((self.x_dim + self.f_dim)/2)))
+        mlp_layers.append(nn.Linear(self.f_dim, self.num_model))
+        mlp_layers.append(nn.BatchNorm1d(self.num_model))
         mlp_layers.append(nn.ReLU(inplace=True))
-        mlp_layers.append(nn.Linear(int((self.x_dim + self.f_dim)/2), self.x_dim)) # ((3072 + 2 * 480)/2, 3072)
-        mlp_layers.append(nn.BatchNorm1d(self.x_dim))
-        mlp_layers.append(nn.ReLU(inplace=True))
-        mlp_layers.append(nn.Linear(self.x_dim, num_model)) # (3072, 2)
-
+        
         self.mlp = nn.Sequential(*mlp_layers)
+
+
 
     def gumbel_softmax(self, logits, temperature, hard=False):
         """
@@ -78,21 +76,25 @@ class Gumbel_Net(nn.Module):
 
         return Variable(noise.float()).to(self.device)
 
-    def forward(self, x, feature, temperature, hard):
-        # x: 16 x 3072
-        # feature: 16 x (2 x 480)
-        # out: 16 x (3072 + 2 x 480)
-        out = torch.cat([x, feature], dim=1)
-        # 16 x 2
+    def forward(self, feature, temperature, hard):
+        # x: # 64, 150528
+        # feature: # 64, 240, 14, 14
+        # out: 64 x (3072 + 2 x 47040)
+        feature = feature.contiguous().view(feature.size(0), -1)
+        out = feature
+
         out = self.mlp(out)
+
         # 1, 2
         logit = F.softmax(out, dim=0)[:1]
+
         out = self.gumbel_softmax(out, temperature, hard) # batch x num_generator
+        
         gumbel_out = out.clone()
         # 16 x 2 x 1
         out = out.unsqueeze(2) # batch x num_generator x 3 x imsize x imsize
         
         # 16 x 2 x 10
-        out = out.repeat(1, 1, 10)
+        out = out.repeat(1, 1, 1000)
 
         return out, gumbel_out, logit
