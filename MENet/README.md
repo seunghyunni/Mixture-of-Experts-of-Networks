@@ -1,6 +1,9 @@
 dataset: CIFAR10
+         05/12 ImageNet으로 변경
 
 main.py: train / validate code
+
+         05/12 training 과정에서 gating network 학습시에 balance loss 추가해서 시도중
 
 model.py: MixNet S , MixNet M 
        
