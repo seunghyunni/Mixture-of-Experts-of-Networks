@@ -36,6 +36,7 @@ def fit(save_dir, train_writer, train_loader, val_loader, model, loss_fn, optimi
         train_writer.add_scalar("valid/acc", acc, epoch + 1)
 
         # print
+        message = ""
         message += '\nEpoch: {}/{}. Validation set - Average loss: {:.4f},  Average Accuracy: {:.2f}%'.format(epoch + 1, n_epochs, val_loss, acc)
 
 
@@ -65,7 +66,6 @@ def train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_interval):
         target = Variable(target).cuda().float()
 
         # Initialize optimizer
-        optimizer.zero_grad()
         #optimizer_smoothing.zero_grad()
 
         # label smoothing
@@ -88,7 +88,7 @@ def train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_interval):
         # Loss
         # print(smoothing.shape) # batch, 1  
         # print(smoothing[0])
-        loss = loss_fn(outputs, target, avg)
+        loss = loss_fn(outputs, target, smoothing)
         losses.append(loss.item())
         total_loss += loss.item()
 
@@ -100,6 +100,7 @@ def train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_interval):
         correct += (predicted.long() == target.long()).sum().item()
 
         # backpropagation
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         #optimizer_smoothing.step()
@@ -124,15 +125,16 @@ def valid_epoch(val_loader, model, loss_fn, cuda):
         model.eval()
         val_loss = 0
         n_samples = 0
+        correct = 0
         for batch_idx, (data, target) in enumerate(val_loader):
             data = Variable(data).cuda().float()
             target = Variable(target).cuda().float()
 
             # predict
-            outputs = model(data)[0]
+            outputs, smoothing = model(data, target)
 
             # loss
-            loss = loss_fn(outputs, target)
+            loss = loss_fn(outputs, target, smoothing)
             losses.append(loss.item())
             val_loss += loss.item()
 
@@ -141,7 +143,7 @@ def valid_epoch(val_loader, model, loss_fn, cuda):
             n_samples += n_batch
 
             _, predicted = torch.max(outputs.data, 1)
-            correct += (predicted == target).sum().item()
+            correct += (predicted.long() == target.long()).sum().item()
 
     val_loss /= n_samples
     acc = 100 * correct / n_samples

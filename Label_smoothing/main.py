@@ -11,6 +11,8 @@ from tensorboardX import SummaryWriter
 import geffnet
 from dataset import create_loader, Dataset
 from utils import smooth, LabelSmoothingLoss
+import os 
+
 
 # Define Parameters
 class config():
@@ -28,7 +30,7 @@ class config():
 
     # Number of workers for dataloader
     workers = 2
-    batch_size = 160
+    batch_size = 32
     image_size = 224
     num_epochs = 20
     lr = 1e-3
@@ -44,6 +46,9 @@ class config():
         transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
     ])
 
+# GPU Setting
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 # Gets the name of a device.
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -57,7 +62,7 @@ embedding_net_1 = geffnet.create_model('mobilenetv3_large_100', pretrained=False
 num_ftrs_1 = embedding_net_1.classifier.in_features
 embedding_net_1.classifier = nn.Sequential(
     nn.Linear(num_ftrs_1, config.n_class),
-    nn.Softmax(dim=0))
+    nn.LogSoftmax(dim=1))
 
 
 # Embedding_Net2 (for training smoothing parameter)
@@ -90,11 +95,11 @@ except:
 
 # loss function
 #loss_fn = MOD_CrossEntropyLoss()
-loss_fn = LabelSmoothingLoss(classes = 1000)
+loss_fn = LabelSmoothingLoss(classes = 1000, batch_size = config.batch_size)
 
 # parameters
 lr = config.lr
-optimizer = optim.Adam(model.parameters(), betas=[.9, .999], weight_decay=0.0, lr=lr)
+optimizer = optim.Adam(model.parameters(), weight_decay=0.0, lr=lr)
 #optimizer_smoothing = optim.Adam(model2.parameters(), betas=[.9, .999], weight_decay=0.0, lr=lr)
 
 scheduler = optim.lr_scheduler.StepLR(optimizer, 8, gamma=0.1, last_epoch=-1)

@@ -27,7 +27,7 @@ easydict.EasyDict({"image_size": 224,
 
                    # Training Settings
                    "epochs": 1000,
-                   "batch_size": 256,
+                   "batch_size": 128,
                    "c_lr" : 0.0002,
                    "g_lr" : 0.0002,
                    "beta1": 0.0,
@@ -180,7 +180,7 @@ for epoch in range(args.epochs):
         c_optimizer.zero_grad()
         gum_optimizer.zero_grad()
 
-        c_loss.backward(retain_graph=True)
+        #c_loss.backward(retain_graph=True)
         balance_loss.backward()
 
         c_optimizer.step()
@@ -244,7 +244,7 @@ for epoch in range(args.epochs):
     
     if val_loss <= best_loss:
         best_loss = val_loss
-        torch.save(C.state_dict(), os.path.join(args.save_dir, '{:03d}'.format(int(epoch+1)) +'_{:05.4f}'.format(val_loss) +'_{:03d}'.format(val_acc) +'.pt'))
+        torch.save(C.state_dict(), os.path.join(args.save_dir, '{:03d}'.format(int(epoch+1)) +'_{:05.4f}'.format(val_loss) +'_{:05.4f}'.format(val_acc) +'.pt'))
 
 
 

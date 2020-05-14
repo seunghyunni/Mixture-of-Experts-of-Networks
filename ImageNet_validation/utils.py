@@ -11,33 +11,6 @@ import torch.nn as nn
 import copy
 
 
-class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes = 1000, dim=-1, batch_size = 4):
-        super(LabelSmoothingLoss, self).__init__()
-        self.cls = classes
-        self.dim = dim
-        self.batch = batch_size
-
-    def forward(self, pred, target, smoothing):
-        # pred = pred.log_softmax(dim=self.dim)
-        #confidence = 1.0 - smoothing
-        with torch.no_grad():
-            # true_dist = pred.data.clone()
-            s = 0
-            true_dist = torch.zeros_like(pred)
-            # print(true_dist.shape) # b, 1000
-            # print(smoothing.shape) # batch, 1
-            for i in range(pred.size(0)):
-                if smoothing[i][0] < 0.1:
-                    s = 0.1
-                else:
-                    s = smoothing[i][0]
-                true_dist[i].fill_(s / (self.cls - 1))
-                true_dist[i].scatter_(0, target.data.long().unsqueeze(1)[i], 1.0 - s)
-        
-        return torch.mean(torch.sum(-true_dist * pred))
-
-
 def imshow(img):
   # Unnormalize
   img = img/2 + 0.5
@@ -51,85 +24,29 @@ def show_plot(iteration,loss):
   plt.show()
 
 
-# class MOD_CrossEntropyLoss(nn.Module):
-#     def __init__(self):
-#         super(MOD_CrossEntropyLoss, self).__init__()
-#         self.log_softmax = nn.LogSoftmax(dim=1)
+class AccumulatedAccuracyMetric:
+    """
+    Works with classification model
+    """
+    def __init__(self):
+        self.correct = 0
+        self.total = 0
 
-#     def forward(self, output1, output2, target_one_hot):
+    def call(self, outputs, target):
+        pred = outputs[0].data.max(1, keepdim=True)[1]
+        self.correct += pred.eq(target[0].data.view_as(pred)).cpu().sum()
+        self.total += target[0].size(0)
+        return self.value()
 
-#         # with torch.no_grad():
-#         tmp_result = []
+    def reset(self):
+        self.correct = 0
+        self.total = 0
 
-#         # label = target.clone().detach()
-#         # label = copy.deepcopy(target)
-#         # label = torch.empty_like(output1).fill_(0).scatter_(1, label.unsqueeze(1), 1).detach()
+    def value(self):
+        return 100 * float(self.correct) / self.total
 
-#         # Batch_iteration ex) 1 ~ 8
-#         for idx in range(32):
-#             # Class_iteration ex) 1 ~ 10
-#             tmp_tensor = None
-#             for i, value in enumerate(output1[idx]):
-#                 tmp_tensor = torch.zeros(output1[idx].shape)
-#                 # max
-#                 if 1 == target_one_hot[idx][i]:
-#                     tmp_tensor[i] = min(value, output2[idx][i])
-#                 # min
-#                 else:
-#                     tmp_tensor[i] = max(value, output2[idx][i])
-
-#             tmp_result.append(tmp_tensor.cuda())
-
-#         result = tmp_result[0]
-#         for val in tmp_result[1:]:
-#             result = torch.cat((result, val), dim=0)
-
-#         output1 = result.reshape(8, 10).cuda()
-
-#         logs = self.log_softmax(output1)
-#         loss = -torch.sum(logs * target_one_hot, dim=1)
-
-#         return loss.sum() / 32
-
-
-def smooth(label, smoothing, n_class = 1000, batch_size = 64):
-    result = None
-
-    # with torch.no_grad():
-    class_num = n_class
-
-    delta = 0.9
-    for idx, weight in enumerate(smoothing):
-        if weight > delta:
-            smoothing[idx] = 0.9
-        elif weight <= 0:
-            smoothing[idx] = 0
-
-    outputs = []
-
-    # Front
-    Front = torch.ones((batch_size, 1)).cuda()
-    Behind = (1 / class_num) * torch.ones((batch_size, class_num)).cuda()
-    Behind = Behind.cuda()
-
-    for idx, weigth in enumerate(smoothing):
-        # 1 - w
-        f = (Front[idx] - weigth) * label[idx]
-        # w
-        b = weigth * Behind[idx]
-        outputs.append(f + b)
-
-    result = outputs[0]
-
-    for val in outputs[1:]:
-        result = torch.cat((result, val), dim=0)
-
-    result = result.reshape(batch_size, n_class).cuda()
-
-    if result is None:
-        pass
-
-    return result
+    def name(self):
+        return 'Accuracy'
 
 
 class CheckpointSaver:
