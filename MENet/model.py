@@ -20,21 +20,21 @@ class Classifier(nn.Module):
         self.image_size = image_size
         
         self.num_model = num_model
-        self.num_class = 1000
+        self.num_class = 10
 
         # MixNet S
         self.mixnet_s = geffnet.create_model('mixnet_s', pretrained=False) 
         num_ftrs_1 = self.mixnet_s.classifier.in_features
         self.mixnet_s.classifier = nn.Sequential(
             nn.Linear(num_ftrs_1, self.num_class),
-            nn.logSoftmax(dim=1))
+            nn.LogSoftmax(dim=1))
         
         # MixNet M
         self.mixnet_m = geffnet.create_model('mixnet_m', pretrained=False)
         num_ftrs_2 = self.mixnet_m.classifier.in_features
         self.mixnet_m.classifier = nn.Sequential(
             nn.Linear(num_ftrs_2, self.num_class),
-            nn.logSoftmax(dim=1))
+            nn.LogSoftmax(dim=1))
         
         # Split model 
         self.all_layers1 = nn.ModuleList()

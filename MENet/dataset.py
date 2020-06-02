@@ -77,7 +77,7 @@ def create_loader(
         dataset,
         input_size,
         batch_size,
-        is_training=False,
+        is_training=True,
         rand_erase_prob=0.,
         rand_erase_mode='const',
         interpolation='bilinear',
@@ -131,15 +131,17 @@ def find_images_and_targets(folder, types=IMG_EXTENSIONS, class_to_idx=None, lea
     labels = []
     filenames = []
     for root, subdirs, files in os.walk(folder, topdown=False):
-        rel_path = os.path.relpath(root, folder) if (root != folder) else ''
-        label = os.path.basename(rel_path) if leaf_name_only else rel_path.replace(os.path.sep, '_')
-        if build_class_idx and not subdirs:
-            class_to_idx[label] = None
-        for f in files:
-            base, ext = os.path.splitext(f)
-            if ext.lower() in types:
-                filenames.append(os.path.join(root, f))
-                labels.append(label)
+        root_name = root.split("/")[-1]
+        if "n01" in root_name:
+            rel_path = os.path.relpath(root, folder) if (root != folder) else ''
+            label = os.path.basename(rel_path) if leaf_name_only else rel_path.replace(os.path.sep, '_')
+            if build_class_idx and not subdirs:
+                class_to_idx[label] = None
+            for f in files:
+                base, ext = os.path.splitext(f)
+                if ext.lower() in types:
+                    filenames.append(os.path.join(root, f))
+                    labels.append(label)
     if build_class_idx:
         classes = sorted(class_to_idx.keys(), key=natural_key)
         for idx, c in enumerate(classes):
@@ -161,6 +163,9 @@ class Dataset(data.Dataset):
             transform=None):
 
         imgs, _, _ = find_images_and_targets(root)
+
+        imgs.sort()
+        
         if len(imgs) == 0:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))

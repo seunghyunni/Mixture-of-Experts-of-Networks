@@ -62,8 +62,7 @@ class Gumbel_Net(nn.Module):
         """
         noise = self.sample_gumbel(logits)
         y = (logits + noise) / temperature
-
-        return F.softmax(y, dim=0)
+        return F.softmax(y, dim=1)
 
     def sample_gumbel(self, logits):
         """
@@ -81,20 +80,22 @@ class Gumbel_Net(nn.Module):
         # feature: # 64, 240, 14, 14
         # out: 64 x (3072 + 2 x 47040)
         feature = feature.contiguous().view(feature.size(0), -1)
+        # print(feature.shape) # 6, 47040
         out = feature
 
         out = self.mlp(out)
 
         # 1, 2
-        logit = F.softmax(out, dim=0)[:1]
+        #tmp = F.softmax(out, dim=1) 
+        #print(tmp.shape) # batch, num_model
+        logit = F.softmax(out, dim=1)[:1]
 
         out = self.gumbel_softmax(out, temperature, hard) # batch x num_generator
-        
-        gumbel_out = out.clone()
-        # 16 x 2 x 1
-        out = out.unsqueeze(2) # batch x num_generator x 3 x imsize x imsize
-        
-        # 16 x 2 x 10
-        out = out.repeat(1, 1, 1000)
 
+        gumbel_out = out.clone()
+        # batch x num_model x 1
+        out = out.unsqueeze(2) # batch x num_generator x 3 x imsize x imsize
+        # batch x num_model x 10
+        out = out.repeat(1, 1, 10)
+        
         return out, gumbel_out, logit

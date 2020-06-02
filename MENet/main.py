@@ -15,7 +15,7 @@ from model import Classifier
 from utils import Gumbel_Net
 import easydict
 from dataset import Dataset, create_loader
-
+from tensorboardX import SummaryWriter
 
 # Configuration
 args = \
@@ -23,11 +23,11 @@ easydict.EasyDict({"image_size": 224,
                    "x_dim": 23520,
                    "num_model": 2,
                    "lambda_gp": 10,
-                   "save_dir": "./checkpoint_0511",
+                   "save_dir": "./checkpoint_0602/",
 
                    # Training Settings
                    "epochs": 1000,
-                   "batch_size": 128,
+                   "batch_size": 16,
                    "c_lr" : 0.0002,
                    "g_lr" : 0.0002,
                    "beta1": 0.0,
@@ -57,7 +57,7 @@ easydict.EasyDict({"image_size": 224,
 
 # GPU Setting
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3"
+os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2"
 
 torch.manual_seed(1)
 if torch.cuda.is_available():
@@ -73,8 +73,11 @@ else:
 os.makedirs(args.save_dir, exist_ok=True)
 
 # Dataset
-traindata_dir = "../ImageNet/train/ILSVRC/Data/CLS-LOC/train"
-validdata_dir = "../ImageNet/train/ILSVRC/Data/CLS-LOC/val"
+# traindata_dir = "../ImageNet/train/ILSVRC/Data/CLS-LOC/train/"
+# validdata_dir = "../ImageNet/val/"
+
+traindata_dir = "../ImageNet_class10/train/"
+validdata_dir = "../ImageNet_class10/val/"
 
 transform =transforms.Compose([transforms.ToTensor(),
                                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -91,7 +94,8 @@ trainloader = create_loader(
     mean= (0.485, 0.456, 0.406),
     std= (0.229, 0.224, 0.225),
     num_workers=2,
-    crop_pct=1.0 )
+    crop_pct=1.0,
+    is_training=True )
 # trainloader = torch.utils.data.DataLoader(trainset, batch_size=32, shuffle=True, num_workers=2, drop_last= True)
 
 # Test Dataset & Loader
@@ -104,7 +108,8 @@ validloader = create_loader(
     mean= (0.485, 0.456, 0.406),
     std= (0.229, 0.224, 0.225),
     num_workers=2,
-    crop_pct=1.0 )
+    crop_pct=1.0,
+    is_training=True )
 #validloader = torch.utils.data.DataLoader(validset, batch_size=32, shuffle=False, num_workers=2)
 
 # Define the model
@@ -136,8 +141,9 @@ def apply_gumbel(pred, gumbel_out):
 #   Gum.load_state_dict(torch.load(os.path.join(self.model_save_path, '{}_Gum.pth'))))
 #   print('loaded trained models (step: {})..!'))
 
-
 best_loss = 100.0
+
+train_writer = SummaryWriter(args.save_dir + "logs/")
 
 # Train  
 for epoch in range(args.epochs):
@@ -158,10 +164,11 @@ for epoch in range(args.epochs):
         # Forward
         pred, feature = C(inputs)
         # print("Prediction shape")
-        # print(pred.shape) # 64, 2, 1000
+        # print(pred.shape) # batch, 2, num_class
         # print("Feature shape")
-        # print(feature.shape) # 64, 240, 14, 14
+        # print(feature.shape) # batch, 240, 14, 14
         out, gumbel_out, logit = Gum(feature, args.gum_t, True)
+
         output = apply_gumbel(pred, out)
 
         c_loss = criterion(output, labels)
@@ -196,20 +203,20 @@ for epoch in range(args.epochs):
         n_samples += n_batch
         correct += (predicted == labels).sum().item()
 
-        # Print every 100 mini-batches
+        # Print every 200 mini-batches
         if i % 200 == 199:
             # elapsed = time.time() - start_time
             # elapsed = str(datetime.timedelta(seconds=elapsed))
-            print('     - Iteration [%5d / %5d] --- Classification_Loss: %.3f     Gating_Loss: %.3f' % (i+1, len(trainloader), c_running_loss / 200, gum_running_loss / 200))
+            print('     - Iteration [%5d / %5d] --- Classification_Loss: %.3f     Gating_Loss: %.3f' % (i+1, len(trainloader), c_running_loss/n_samples, gum_running_loss/n_samples))
             print("         - Gumbel choice for 1 instances : ", gumbel_out.max(dim=1)[1].data[0])
             print("         - Logit choice (underlying distribution :", logit.data[0])
-            print('         - Accuracy of the network on the 10000 test images: %d %%' % (100 * correct / n_samples))
-            c_running_loss = 0.0
-            gum_running_loss = 0.0
-            correct = 0
-            n_samples = 0
+            print('         - Accuracy of the network on the 500 test images: %d %%' % (100 * correct / n_samples))
 
-    
+
+    # Write to Tensorboard
+    train_writer.add_scalar("train/loss", c_running_loss/n_samples, epoch + 1)
+    train_writer.add_scalar("train/acc", (100 * correct / n_samples) , epoch + 1)
+
     # Validation
     C.eval()
     Gum.eval()
@@ -240,12 +247,15 @@ for epoch in range(args.epochs):
     val_acc = 100 * correct / n_samples
     print("===========================================================================")
     print('     - Validation: Classification loss %.4f \n' % (val_loss))
-    print('     - Accuracy of the network on the 10000 test images: %d ' % (val_acc))
+    print('     - Accuracy of the network on the 500 test images: %d %% ' %(val_acc))
     
     if val_loss <= best_loss:
         best_loss = val_loss
         torch.save(C.state_dict(), os.path.join(args.save_dir, '{:03d}'.format(int(epoch+1)) +'_{:05.4f}'.format(val_loss) +'_{:05.4f}'.format(val_acc) +'.pt'))
 
+    # Write to Tensorboard
+    train_writer.add_scalar("valid/loss", val_loss, epoch + 1)
+    train_writer.add_scalar("valid/acc", val_acc, epoch + 1)
 
 
        
